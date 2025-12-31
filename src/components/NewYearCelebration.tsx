@@ -13,15 +13,52 @@ import {
   Star,
   Music,
   Plane,
-  Gift
+  Gift,
+  Plus,
+  X,
+  Play,
+  Upload,
+  Trash2
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+
+interface PhotoAlbum {
+  id: number;
+  title: string;
+  description: string;
+  likes: string;
+  comments: string;
+  shares: string;
+  platform: React.ReactNode;
+  icon: React.ReactNode;
+  imageUrl?: string;
+  gradientClass: string;
+  rotation: number;
+  delay: number;
+}
 
 const NewYearCelebration = () => {
   const [count, setCount] = useState(10);
   const [isCelebration, setIsCelebration] = useState(false);
+  const [isStarted, setIsStarted] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [userPhotos, setUserPhotos] = useState<PhotoAlbum[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const photoAlbums = [
+  // Form state
+  const [formTitle, setFormTitle] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formImage, setFormImage] = useState<string | null>(null);
+
+  const defaultPhotoAlbums: PhotoAlbum[] = [
     { 
       id: 1, 
       title: "Expedição Alpes 2025", 
@@ -89,14 +126,71 @@ const NewYearCelebration = () => {
     }
   ];
 
+  const allPhotoAlbums = [...userPhotos, ...defaultPhotoAlbums];
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddPhoto = () => {
+    if (!formTitle.trim()) return;
+
+    const gradients = [
+      "bg-gradient-to-br from-celebration-blue to-celebration-purple",
+      "bg-gradient-to-br from-celebration-rose to-celebration-purple",
+      "bg-gradient-to-br from-celebration-teal to-celebration-blue",
+      "bg-gradient-to-br from-celebration-gold to-celebration-rose",
+    ];
+
+    const newPhoto: PhotoAlbum = {
+      id: Date.now(),
+      title: formTitle,
+      description: formDescription || "Minha memória especial de 2025",
+      likes: `${Math.floor(Math.random() * 10) + 1}.${Math.floor(Math.random() * 9)}k`,
+      comments: `${Math.floor(Math.random() * 500) + 100}`,
+      shares: `${Math.floor(Math.random() * 100) + 10}`,
+      platform: <Instagram className="w-4 h-4" />,
+      icon: <Camera className="w-12 h-12 text-foreground/30" />,
+      imageUrl: formImage || undefined,
+      gradientClass: gradients[Math.floor(Math.random() * gradients.length)],
+      rotation: (Math.random() - 0.5) * 20,
+      delay: userPhotos.length * 2,
+    };
+
+    setUserPhotos(prev => [...prev, newPhoto]);
+    setFormTitle('');
+    setFormDescription('');
+    setFormImage(null);
+    setIsFormOpen(false);
+  };
+
+  const handleRemovePhoto = (id: number) => {
+    setUserPhotos(prev => prev.filter(photo => photo.id !== id));
+  };
+
+  const handleStart = () => {
+    setIsStarted(true);
+    setCount(10);
+    setIsCelebration(false);
+  };
+
   useEffect(() => {
+    if (!isStarted) return;
+    
     if (count > 0) {
       const timer = setTimeout(() => setCount(count - 1), 1000);
       return () => clearTimeout(timer);
     } else {
       setIsCelebration(true);
     }
-  }, [count]);
+  }, [count, isStarted]);
 
   // Fireworks Engine
   useEffect(() => {
@@ -144,12 +238,12 @@ const NewYearCelebration = () => {
     const rockets: RocketType[] = [];
 
     const colors = [
-      'hsl(217, 91%, 60%)',  // Blue
-      'hsl(280, 65%, 60%)',  // Purple
-      'hsl(38, 92%, 60%)',   // Gold
-      'hsl(350, 80%, 65%)',  // Rose
-      'hsl(174, 72%, 50%)',  // Teal
-      'hsl(0, 0%, 100%)',    // White
+      'hsl(217, 91%, 60%)',
+      'hsl(280, 65%, 60%)',
+      'hsl(38, 92%, 60%)',
+      'hsl(350, 80%, 65%)',
+      'hsl(174, 72%, 50%)',
+      'hsl(0, 0%, 100%)',
     ];
 
     class Rocket implements RocketType {
@@ -182,7 +276,6 @@ const NewYearCelebration = () => {
         ctx!.fillStyle = this.color;
         ctx!.fill();
         
-        // Glowing trail
         const gradient = ctx!.createLinearGradient(this.x, this.y, this.x, this.y + 30);
         gradient.addColorStop(0, this.color);
         gradient.addColorStop(1, 'transparent');
@@ -290,7 +383,6 @@ const NewYearCelebration = () => {
         <div className="absolute inset-0 bg-night-gradient" />
         <div className="absolute inset-0 bg-aurora animate-aurora opacity-50" style={{ backgroundSize: '400% 400%' }} />
         
-        {/* Floating stars */}
         {[...Array(50)].map((_, i) => (
           <motion.div
             key={i}
@@ -314,10 +406,121 @@ const NewYearCelebration = () => {
 
       <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" />
 
-      {/* Floating Photo Albums */}
+      {/* Top Left Controls */}
       {!isCelebration && (
+        <div className="fixed top-6 left-6 z-40 flex gap-3">
+          <Button
+            onClick={() => setIsFormOpen(true)}
+            className="bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 backdrop-blur-sm"
+            size="sm"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar
+          </Button>
+        </div>
+      )}
+
+      {/* Photo Form Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-border/30 text-foreground max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-foreground">Adicionar Memória</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">Título</label>
+              <Input
+                placeholder="Ex: Viagem inesquecível"
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                className="bg-background/50 border-border/30"
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">Descrição</label>
+              <Textarea
+                placeholder="Conte sobre esse momento especial..."
+                value={formDescription}
+                onChange={(e) => setFormDescription(e.target.value)}
+                className="bg-background/50 border-border/30 resize-none"
+                rows={3}
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">Foto</label>
+              <div className="relative">
+                {formImage ? (
+                  <div className="relative rounded-lg overflow-hidden">
+                    <img src={formImage} alt="Preview" className="w-full h-40 object-cover" />
+                    <button
+                      onClick={() => setFormImage(null)}
+                      className="absolute top-2 right-2 p-1 bg-background/80 rounded-full hover:bg-background"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border/30 rounded-lg cursor-pointer hover:bg-background/30 transition-colors">
+                    <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">Clique para upload</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* User Photos List */}
+            {userPhotos.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">Suas Memórias ({userPhotos.length})</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {userPhotos.map(photo => (
+                    <div key={photo.id} className="flex items-center justify-between p-2 bg-background/30 rounded-lg">
+                      <span className="text-sm truncate flex-1">{photo.title}</span>
+                      <button
+                        onClick={() => handleRemovePhoto(photo.id)}
+                        className="p-1 hover:bg-destructive/20 rounded text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsFormOpen(false)}
+                className="flex-1 border-border/30"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAddPhoto}
+                disabled={!formTitle.trim()}
+                className="flex-1 bg-primary hover:bg-primary/90"
+              >
+                Adicionar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Floating Photo Albums */}
+      {isStarted && !isCelebration && (
         <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-          {photoAlbums.map((album, idx) => (
+          {allPhotoAlbums.map((album, idx) => (
             <motion.div
               key={album.id}
               initial={{ opacity: 0, y: 400, rotate: 0 }}
@@ -351,8 +554,14 @@ const NewYearCelebration = () => {
                 
                 {/* Image Area */}
                 <div className={`h-44 w-full ${album.gradientClass} relative flex items-center justify-center`}>
-                  <div className="absolute inset-0 bg-background/10" />
-                  {album.icon}
+                  {album.imageUrl ? (
+                    <img src={album.imageUrl} alt={album.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 bg-background/10" />
+                      {album.icon}
+                    </>
+                  )}
                 </div>
 
                 {/* Content */}
@@ -381,7 +590,49 @@ const NewYearCelebration = () => {
       {/* Main UI */}
       <div className="relative z-20 flex flex-col items-center text-center px-6">
         <AnimatePresence mode="wait">
-          {!isCelebration ? (
+          {!isStarted ? (
+            <motion.div
+              key="start"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="flex flex-col items-center"
+            >
+              <motion.div 
+                animate={{ opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="mb-6 tracking-[0.3em] text-primary font-semibold text-sm uppercase"
+              >
+                <Sparkles className="inline-block w-4 h-4 mr-2" />
+                Retrospectiva 2025
+                <Sparkles className="inline-block w-4 h-4 ml-2" />
+              </motion.div>
+              
+              <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-none mb-8 bg-clip-text text-transparent bg-gradient-to-b from-foreground via-primary to-secondary">
+                2025 → 2026
+              </h1>
+              
+              <p className="text-muted-foreground text-sm md:text-base max-w-md mb-10 text-center">
+                Adicione suas memórias especiais e celebre a chegada do novo ano com uma retrospectiva personalizada.
+              </p>
+
+              {userPhotos.length > 0 && (
+                <p className="text-primary text-sm mb-4">
+                  {userPhotos.length} memória{userPhotos.length > 1 ? 's' : ''} adicionada{userPhotos.length > 1 ? 's' : ''}
+                </p>
+              )}
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleStart}
+                className="group relative px-12 py-5 bg-gradient-to-r from-primary to-secondary text-primary-foreground rounded-full font-bold text-lg tracking-widest uppercase overflow-hidden transition-all shadow-glow-blue"
+              >
+                <Play className="inline-block w-5 h-5 mr-3" />
+                <span className="relative z-10">Iniciar</span>
+              </motion.button>
+            </motion.div>
+          ) : !isCelebration ? (
             <motion.div
               key="countdown"
               exit={{ opacity: 0, scale: 1.5, filter: "blur(20px)" }}
@@ -465,6 +716,7 @@ const NewYearCelebration = () => {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
+                    setIsStarted(false);
                     setCount(10);
                     setIsCelebration(false);
                   }}
