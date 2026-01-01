@@ -18,7 +18,12 @@ import {
   X,
   Play,
   Upload,
-  Trash2
+  Trash2,
+  Download,
+  Share,
+  Volume2,
+  VolumeX,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +34,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
+import { useVideoExport } from '@/hooks/useVideoExport';
+import { toast } from 'sonner';
+
+type SocialPlatform = 'instagram' | 'twitter' | 'facebook';
 
 interface PhotoAlbum {
   id: number;
@@ -37,7 +54,8 @@ interface PhotoAlbum {
   likes: string;
   comments: string;
   shares: string;
-  platform: React.ReactNode;
+  platform: SocialPlatform;
+  platformIcon: React.ReactNode;
   icon: React.ReactNode;
   imageUrl?: string;
   gradientClass: string;
@@ -45,18 +63,49 @@ interface PhotoAlbum {
   delay: number;
 }
 
+const platformIcons: Record<SocialPlatform, React.ReactNode> = {
+  instagram: <Instagram className="w-4 h-4" />,
+  twitter: <Twitter className="w-4 h-4" />,
+  facebook: <Facebook className="w-4 h-4" />,
+};
+
+const platformNames: Record<SocialPlatform, string> = {
+  instagram: 'Instagram',
+  twitter: 'Twitter',
+  facebook: 'Facebook',
+};
+
 const NewYearCelebration = () => {
   const [count, setCount] = useState(10);
   const [isCelebration, setIsCelebration] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [userPhotos, setUserPhotos] = useState<PhotoAlbum[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formImage, setFormImage] = useState<string | null>(null);
+  const [formPlatform, setFormPlatform] = useState<SocialPlatform>('instagram');
+
+  // Hooks
+  const { 
+    initAudioContext,
+    playCountdownTick, 
+    playCelebration, 
+    stopCelebration 
+  } = useSoundEffects();
+  
+  const { 
+    isExporting, 
+    exportProgress, 
+    createSlideshow, 
+    downloadVideo, 
+    shareVideo 
+  } = useVideoExport();
 
   const defaultPhotoAlbums: PhotoAlbum[] = [
     { 
@@ -66,7 +115,8 @@ const NewYearCelebration = () => {
       likes: "12.4k",
       comments: "842",
       shares: "156",
-      platform: <Instagram className="w-4 h-4" />,
+      platform: 'instagram',
+      platformIcon: <Instagram className="w-4 h-4" />,
       icon: <Plane className="w-12 h-12 text-foreground/30" />,
       gradientClass: "bg-gradient-to-br from-celebration-blue to-celebration-purple",
       rotation: -8,
@@ -79,7 +129,8 @@ const NewYearCelebration = () => {
       likes: "45.1k",
       comments: "2.1k",
       shares: "8.4k",
-      platform: <Twitter className="w-4 h-4" />,
+      platform: 'twitter',
+      platformIcon: <Twitter className="w-4 h-4" />,
       icon: <Star className="w-12 h-12 text-foreground/30" />,
       gradientClass: "bg-gradient-to-br from-muted to-background",
       rotation: 12,
@@ -92,7 +143,8 @@ const NewYearCelebration = () => {
       likes: "892",
       comments: "124",
       shares: "12",
-      platform: <Facebook className="w-4 h-4" />,
+      platform: 'facebook',
+      platformIcon: <Facebook className="w-4 h-4" />,
       icon: <Heart className="w-12 h-12 text-foreground/30" />,
       gradientClass: "bg-gradient-to-br from-celebration-teal to-celebration-blue",
       rotation: -5,
@@ -105,7 +157,8 @@ const NewYearCelebration = () => {
       likes: "5.6k",
       comments: "310",
       shares: "45",
-      platform: <Instagram className="w-4 h-4" />,
+      platform: 'instagram',
+      platformIcon: <Instagram className="w-4 h-4" />,
       icon: <Gift className="w-12 h-12 text-foreground/30" />,
       gradientClass: "bg-gradient-to-br from-celebration-rose to-celebration-purple",
       rotation: 6,
@@ -118,7 +171,8 @@ const NewYearCelebration = () => {
       likes: "23.8k",
       comments: "1.2k",
       shares: "890",
-      platform: <Instagram className="w-4 h-4" />,
+      platform: 'instagram',
+      platformIcon: <Instagram className="w-4 h-4" />,
       icon: <Music className="w-12 h-12 text-foreground/30" />,
       gradientClass: "bg-gradient-to-br from-celebration-gold to-celebration-rose",
       rotation: -10,
@@ -156,7 +210,8 @@ const NewYearCelebration = () => {
       likes: `${Math.floor(Math.random() * 10) + 1}.${Math.floor(Math.random() * 9)}k`,
       comments: `${Math.floor(Math.random() * 500) + 100}`,
       shares: `${Math.floor(Math.random() * 100) + 10}`,
-      platform: <Instagram className="w-4 h-4" />,
+      platform: formPlatform,
+      platformIcon: platformIcons[formPlatform],
       icon: <Camera className="w-12 h-12 text-foreground/30" />,
       imageUrl: formImage || undefined,
       gradientClass: gradients[Math.floor(Math.random() * gradients.length)],
@@ -168,29 +223,90 @@ const NewYearCelebration = () => {
     setFormTitle('');
     setFormDescription('');
     setFormImage(null);
+    setFormPlatform('instagram');
     setIsFormOpen(false);
+    toast.success('Memória adicionada com sucesso!');
   };
 
   const handleRemovePhoto = (id: number) => {
     setUserPhotos(prev => prev.filter(photo => photo.id !== id));
+    toast.success('Memória removida');
   };
 
   const handleStart = () => {
+    initAudioContext();
     setIsStarted(true);
     setCount(10);
     setIsCelebration(false);
   };
 
+  const handleExportVideo = async () => {
+    const photosToExport = allPhotoAlbums.map(p => ({
+      id: p.id,
+      title: p.title,
+      description: p.description,
+      imageUrl: p.imageUrl,
+      gradientClass: p.gradientClass,
+    }));
+
+    toast.info('Gerando vídeo... Isso pode levar alguns segundos.');
+    
+    const blob = await createSlideshow(photosToExport);
+    
+    if (blob) {
+      setIsExportDialogOpen(true);
+      // Store blob for later use
+      (window as any).__exportedVideoBlob = blob;
+      toast.success('Vídeo gerado com sucesso!');
+    } else {
+      toast.error('Erro ao gerar vídeo. Tente novamente.');
+    }
+  };
+
+  const handleDownload = async () => {
+    const blob = (window as any).__exportedVideoBlob;
+    if (blob) {
+      await downloadVideo(blob);
+      toast.success('Download iniciado!');
+    }
+  };
+
+  const handleShare = async () => {
+    const blob = (window as any).__exportedVideoBlob;
+    if (blob) {
+      const shared = await shareVideo(blob);
+      if (!shared) {
+        // Fallback: copy share text
+        await navigator.clipboard.writeText('Confira minha retrospectiva de 2025! 🎉 #Retrospectiva2025');
+        toast.success('Texto copiado! Cole nas suas redes sociais.');
+      }
+    }
+  };
+
+  // Countdown with sound effects
   useEffect(() => {
     if (!isStarted) return;
     
     if (count > 0) {
+      if (soundEnabled) {
+        playCountdownTick(count);
+      }
       const timer = setTimeout(() => setCount(count - 1), 1000);
       return () => clearTimeout(timer);
     } else {
       setIsCelebration(true);
+      if (soundEnabled) {
+        playCelebration();
+      }
     }
-  }, [count, isStarted]);
+  }, [count, isStarted, soundEnabled, playCountdownTick, playCelebration]);
+
+  // Stop celebration sound on reset
+  useEffect(() => {
+    if (!isCelebration) {
+      stopCelebration();
+    }
+  }, [isCelebration, stopCelebration]);
 
   // Fireworks Engine
   useEffect(() => {
@@ -406,7 +522,7 @@ const NewYearCelebration = () => {
 
       <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" />
 
-      {/* Top Left Controls */}
+      {/* Top Controls */}
       {!isCelebration && (
         <div className="fixed top-6 left-6 z-40 flex gap-3">
           <Button
@@ -416,6 +532,14 @@ const NewYearCelebration = () => {
           >
             <Plus className="w-4 h-4 mr-2" />
             Adicionar
+          </Button>
+          <Button
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </Button>
         </div>
       )}
@@ -447,6 +571,35 @@ const NewYearCelebration = () => {
                 className="bg-background/50 border-border/30 resize-none"
                 rows={3}
               />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">Plataforma Social</label>
+              <Select value={formPlatform} onValueChange={(value: SocialPlatform) => setFormPlatform(value)}>
+                <SelectTrigger className="bg-background/50 border-border/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="instagram">
+                    <div className="flex items-center gap-2">
+                      <Instagram className="w-4 h-4" />
+                      Instagram
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="twitter">
+                    <div className="flex items-center gap-2">
+                      <Twitter className="w-4 h-4" />
+                      Twitter
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="facebook">
+                    <div className="flex items-center gap-2">
+                      <Facebook className="w-4 h-4" />
+                      Facebook
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
             <div>
@@ -484,7 +637,10 @@ const NewYearCelebration = () => {
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {userPhotos.map(photo => (
                     <div key={photo.id} className="flex items-center justify-between p-2 bg-background/30 rounded-lg">
-                      <span className="text-sm truncate flex-1">{photo.title}</span>
+                      <div className="flex items-center gap-2">
+                        {platformIcons[photo.platform]}
+                        <span className="text-sm truncate flex-1">{photo.title}</span>
+                      </div>
                       <button
                         onClick={() => handleRemovePhoto(photo.id)}
                         className="p-1 hover:bg-destructive/20 rounded text-destructive"
@@ -511,6 +667,48 @@ const NewYearCelebration = () => {
                 className="flex-1 bg-primary hover:bg-primary/90"
               >
                 Adicionar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Dialog */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-border/30 text-foreground max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-foreground">Partilhar Retrospectiva</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Seu vídeo de retrospectiva está pronto! Escolha como deseja partilhar:
+            </p>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={handleDownload}
+                className="flex-col h-20 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
+              >
+                <Download className="w-6 h-6 mb-2" />
+                Download
+              </Button>
+              <Button
+                onClick={handleShare}
+                className="flex-col h-20 bg-celebration-rose/20 hover:bg-celebration-rose/30 text-celebration-rose border border-celebration-rose/30"
+              >
+                <Share className="w-6 h-6 mb-2" />
+                Partilhar
+              </Button>
+            </div>
+
+            <div className="pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsExportDialogOpen(false)}
+                className="w-full border-border/30"
+              >
+                Fechar
               </Button>
             </div>
           </div>
@@ -549,7 +747,7 @@ const NewYearCelebration = () => {
                     </div>
                     <span className="text-xs font-bold text-foreground">User_2025</span>
                   </div>
-                  <div className="text-muted-foreground">{album.platform}</div>
+                  <div className="text-muted-foreground">{album.platformIcon}</div>
                 </div>
                 
                 {/* Image Area */}
@@ -706,25 +904,48 @@ const NewYearCelebration = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1 }}
-                className="mt-12 flex flex-col items-center gap-8"
+                className="mt-12 flex flex-col items-center gap-6"
               >
                 <p className="text-muted-foreground tracking-widest text-sm md:text-base max-w-md uppercase font-medium text-center">
                   Novas conexões, novos posts, <br/>a mesma essência.
                 </p>
                 
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    setIsStarted(false);
-                    setCount(10);
-                    setIsCelebration(false);
-                  }}
-                  className="group relative px-10 py-4 bg-foreground text-background rounded-full font-bold text-sm tracking-widest uppercase overflow-hidden transition-all hover:pr-14 shadow-glow-gold"
-                >
-                  <span className="relative z-10">Reiniciar</span>
-                  <ChevronRight className="absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all w-5 h-5" />
-                </motion.button>
+                <div className="flex gap-4 flex-wrap justify-center">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleExportVideo}
+                    disabled={isExporting}
+                    className="group relative px-8 py-4 bg-celebration-gold/20 text-celebration-gold rounded-full font-bold text-sm tracking-widest uppercase overflow-hidden transition-all border border-celebration-gold/30 disabled:opacity-50"
+                  >
+                    {isExporting ? (
+                      <>
+                        <Loader2 className="inline-block w-5 h-5 mr-2 animate-spin" />
+                        {Math.round(exportProgress)}%
+                      </>
+                    ) : (
+                      <>
+                        <Share className="inline-block w-5 h-5 mr-2" />
+                        Exportar
+                      </>
+                    )}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      stopCelebration();
+                      setIsStarted(false);
+                      setCount(10);
+                      setIsCelebration(false);
+                    }}
+                    className="group relative px-10 py-4 bg-foreground text-background rounded-full font-bold text-sm tracking-widest uppercase overflow-hidden transition-all hover:pr-14 shadow-glow-gold"
+                  >
+                    <span className="relative z-10">Reiniciar</span>
+                    <ChevronRight className="absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all w-5 h-5" />
+                  </motion.button>
+                </div>
               </motion.div>
             </motion.div>
           )}
