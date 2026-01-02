@@ -1,1 +1,13 @@
 project_id = "rkhwacnkhnpxsekvgxtz"
+
+[functions.generate-video]
+verify_jwt = true
+
+[functions.process-prompt]
+verify_jwt = true
+
+[functions.paddle-webhook]
+verify_jwt = false
+
+[functions.renew-credits]
+verify_jwt = false
