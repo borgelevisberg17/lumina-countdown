@@ -58,16 +58,17 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
         celebration: {
-          blue: "hsl(var(--celebration-blue))",
           purple: "hsl(var(--celebration-purple))",
+          blue: "hsl(var(--celebration-blue))",
           gold: "hsl(var(--celebration-gold))",
           rose: "hsl(var(--celebration-rose))",
           teal: "hsl(var(--celebration-teal))",
+          emerald: "hsl(var(--celebration-emerald))",
         },
       },
       fontFamily: {
-        sans: ['Space Grotesk', 'sans-serif'],
-        display: ['Outfit', 'sans-serif'],
+        sans: ['Inter', 'sans-serif'],
+        display: ['Sora', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",

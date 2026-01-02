@@ -3,27 +3,29 @@ import { Sparkles, Twitter, Instagram, Youtube } from "lucide-react";
 
 export const Footer = () => {
   return (
-    <footer className="py-16 px-4 border-t border-border/50">
-      <div className="container mx-auto">
-        <div className="grid md:grid-cols-4 gap-12 mb-12">
+    <footer className="py-12 sm:py-16 px-4 sm:px-6 lg:px-8 border-t border-border/50 bg-card/30">
+      <div className="max-w-6xl mx-auto">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-12 mb-10 sm:mb-12">
           {/* Brand */}
-          <div className="md:col-span-1">
+          <div className="col-span-2 md:col-span-1">
             <Link to="/" className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-6 h-6 text-primary" />
-              <span className="font-display text-xl font-bold text-foreground">YearRecap AI</span>
+              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <span className="font-display text-lg font-bold text-foreground">YearRecap</span>
             </Link>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Transforme suas memórias em vídeos incríveis com inteligência artificial.
+            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+              Transforme memórias em vídeos com IA.
             </p>
             {/* Social Links */}
-            <div className="flex items-center gap-3 mt-4">
-              <a href="#" className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-primary/20 transition-colors">
+            <div className="flex items-center gap-2">
+              <a href="#" className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center hover:bg-primary/10 transition-colors">
                 <Twitter className="w-4 h-4 text-muted-foreground" />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-primary/20 transition-colors">
+              <a href="#" className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center hover:bg-primary/10 transition-colors">
                 <Instagram className="w-4 h-4 text-muted-foreground" />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-primary/20 transition-colors">
+              <a href="#" className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center hover:bg-primary/10 transition-colors">
                 <Youtube className="w-4 h-4 text-muted-foreground" />
               </a>
             </div>
@@ -31,83 +33,67 @@ export const Footer = () => {
 
           {/* Product */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Produto</h4>
-            <ul className="space-y-3">
-              <li>
-                <a href="#recursos" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Recursos
-                </a>
-              </li>
-              <li>
-                <a href="#templates" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Templates
-                </a>
-              </li>
-              <li>
-                <a href="#precos" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Preços
-                </a>
-              </li>
-              <li>
-                <a href="#demo" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Demonstração
-                </a>
-              </li>
+            <h4 className="font-semibold text-foreground mb-3 sm:mb-4 text-sm">Produto</h4>
+            <ul className="space-y-2.5">
+              {[
+                { label: "Recursos", href: "#recursos" },
+                { label: "Templates", href: "#templates" },
+                { label: "Preços", href: "#precos" },
+                { label: "Demo", href: "#demo" }
+              ].map((item) => (
+                <li key={item.href}>
+                  <a href={item.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    {item.label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* Support */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Suporte</h4>
-            <ul className="space-y-3">
-              <li>
-                <a href="#como-funciona" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Como Funciona
-                </a>
-              </li>
-              <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  FAQ
-                </a>
-              </li>
-              <li>
-                <a href="mailto:support@yearrecap.ai" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Contato
-                </a>
-              </li>
+            <h4 className="font-semibold text-foreground mb-3 sm:mb-4 text-sm">Suporte</h4>
+            <ul className="space-y-2.5">
+              {[
+                { label: "Como Funciona", href: "#como-funciona" },
+                { label: "FAQ", href: "#" },
+                { label: "Contato", href: "mailto:support@yearrecap.ai" }
+              ].map((item, index) => (
+                <li key={index}>
+                  <a href={item.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    {item.label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Legal</h4>
-            <ul className="space-y-3">
-              <li>
-                <Link to="/terms-of-service" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Termos de Serviço
-                </Link>
-              </li>
-              <li>
-                <Link to="/privacy-policy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Política de Privacidade
-                </Link>
-              </li>
-              <li>
-                <Link to="/refund-policy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Política de Reembolso
-                </Link>
-              </li>
+            <h4 className="font-semibold text-foreground mb-3 sm:mb-4 text-sm">Legal</h4>
+            <ul className="space-y-2.5">
+              {[
+                { label: "Termos de Serviço", to: "/terms-of-service" },
+                { label: "Privacidade", to: "/privacy-policy" },
+                { label: "Reembolso", to: "/refund-policy" }
+              ].map((item) => (
+                <li key={item.to}>
+                  <Link to={item.to} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
 
         {/* Bottom */}
-        <div className="pt-8 border-t border-border/50 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground">
+        <div className="pt-6 sm:pt-8 border-t border-border/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             © 2026 YearRecap AI. Todos os direitos reservados.
           </p>
-          <p className="text-sm text-muted-foreground">
-            Feito com ❤️ usando IA
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Feito com IA
           </p>
         </div>
       </div>
