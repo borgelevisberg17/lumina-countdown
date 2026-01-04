@@ -34,7 +34,20 @@ const TEXT_TEMPLATES = [
   { id: "rotate_zoom", name: "Rotate & Zoom", description: "Rotaciona com confete" },
 ];
 
-const DEFAULT_PROMPT = "Crie uma retrospectiva alegre do ano com minhas fotos, destacando momentos chave como viagens, amigos e conquistas. Use transições suaves, música uplifting e legendas animadas em branco sobre fundo azul claro. Duração total: 60 segundos.";
+const DEFAULT_PROMPT = "Crie uma retrospectiva alegre do ano com minhas fotos, destacando momentos chave como viagens, amigos e conquistas. Use transições suaves, música uplifting e legendas animadas em branco sobre fundo azul claro.";
+
+async function getBackendFunctionErrorMessage(error: any): Promise<string> {
+  // supabase-js throws specialized errors for Functions; they include a Response in `context`
+  const ctx = error?.context;
+  if (ctx && typeof ctx.json === "function") {
+    const body = await ctx.json().catch(() => null);
+    if (body?.required != null && body?.available != null) {
+      return `Créditos insuficientes (precisa ${body.required}, você tem ${body.available}).`;
+    }
+    if (typeof body?.error === "string" && body.error.trim()) return body.error;
+  }
+  return (error?.message as string) || "Erro inesperado";
+}
 
 interface UploadedPhoto {
   id: string;
@@ -127,7 +140,8 @@ export default function Create() {
       toast.success("Prompt processado! Revise as especificações.");
     } catch (error: any) {
       console.error("Error processing prompt:", error);
-      toast.error(error.message || "Erro ao processar prompt");
+      const message = await getBackendFunctionErrorMessage(error);
+      toast.error(message || "Erro ao processar prompt");
     } finally {
       setIsProcessing(false);
     }
@@ -196,13 +210,14 @@ export default function Create() {
         },
       });
 
-      if (error) {
-        if (error.message?.includes("402")) {
-          toast.error("Créditos insuficientes. Faça upgrade do seu plano.");
-          return;
-        }
-        throw error;
-      }
+       if (error) {
+         const message = await getBackendFunctionErrorMessage(error);
+         if (message.toLowerCase().includes("crédit")) {
+           toast.error(message);
+           return;
+         }
+         throw new Error(message);
+       }
 
       await refetch();
       toast.success("Vídeo gerado com sucesso!");

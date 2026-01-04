@@ -29,7 +29,10 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const defaultPrompt = `Crie uma retrospectiva alegre do ano com minhas fotos, destacando momentos chave como viagens, amigos e conquistas. Use transições suaves, música uplifting e legendas animadas em branco sobre fundo azul claro. Duração total: 60 segundos.`;
+    const desiredDuration =
+      typeof duration === "number" && Number.isFinite(duration) ? duration : 60;
+
+    const defaultPrompt = `Crie uma retrospectiva alegre do ano com minhas fotos, destacando momentos chave como viagens, amigos e conquistas. Use transições suaves, música uplifting e legendas animadas em branco sobre fundo azul claro. Duração total: ${desiredDuration} segundos.`;
 
     const userPrompt = prompt || defaultPrompt;
 
@@ -40,12 +43,12 @@ Analise o prompt do usuário e retorne APENAS um JSON válido com as seguintes p
 - transitionStyle: tipo de transição (ex: "fade", "zoom", "slide", "wave")
 - musicMood: humor da música (ex: "uplifting", "emotional", "energetic", "calm")
 - textTemplate: template de legenda (fade_in, bounce, typewriter, slide_up_glow, rotate_zoom)
-- suggestedDuration: duração sugerida em segundos (número)
+- suggestedDuration: duração sugerida em segundos (número) — NUNCA maior que a duração desejada
 - specialEffects: array de efeitos especiais (ex: ["particles", "glow", "confetti"])
 
 Baseie sua análise no prompt do usuário.
 Número de fotos: ${photoCount || 10}
-Duração desejada: ${duration || 60} segundos
+Duração desejada (limite): ${desiredDuration} segundos
 
 IMPORTANTE: Retorne APENAS o JSON, sem markdown, sem texto adicional.`;
 
@@ -92,15 +95,26 @@ IMPORTANTE: Retorne APENAS o JSON, sem markdown, sem texto adicional.`;
     try {
       // Try to extract JSON from the content
       let jsonContent = content;
-      
+
       // Remove markdown code blocks if present
       if (content.includes("```json")) {
         jsonContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "");
       } else if (content.includes("```")) {
         jsonContent = content.replace(/```\n?/g, "");
       }
-      
+
       videoSpecs = JSON.parse(jsonContent.trim());
+
+      // Safety clamp: never exceed the desired duration coming from the client
+      const suggested =
+        typeof videoSpecs?.suggestedDuration === "number" && Number.isFinite(videoSpecs.suggestedDuration)
+          ? videoSpecs.suggestedDuration
+          : desiredDuration;
+      videoSpecs = {
+        ...videoSpecs,
+        suggestedDuration: Math.min(suggested, desiredDuration),
+      };
+
       console.log("Parsed video specs:", videoSpecs);
     } catch (parseError) {
       console.error("Error parsing AI response, using defaults:", parseError);
@@ -111,7 +125,7 @@ IMPORTANTE: Retorne APENAS o JSON, sem markdown, sem texto adicional.`;
         transitionStyle: "fade",
         musicMood: "uplifting",
         textTemplate: "fade_in",
-        suggestedDuration: duration || 60,
+        suggestedDuration: desiredDuration,
         specialEffects: ["particles", "glow"],
       };
     }
