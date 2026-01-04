@@ -124,17 +124,17 @@ serve(async (req) => {
       console.log("Insufficient credits");
       await supabase
         .from("videos")
-        .update({ 
-          status: "failed", 
-          error_message: "Insufficient credits" 
+        .update({
+          status: "failed",
+          error_message: "Créditos insuficientes",
         })
         .eq("id", videoId);
 
       return new Response(
-        JSON.stringify({ 
-          error: "Insufficient credits", 
-          required: creditsNeeded, 
-          available: credits?.balance || 0 
+        JSON.stringify({
+          error: "Créditos insuficientes",
+          required: creditsNeeded,
+          available: credits?.balance || 0,
         }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -149,14 +149,14 @@ serve(async (req) => {
       console.log("Photo limit exceeded:", photoCount, ">", maxPhotos);
       await supabase
         .from("videos")
-        .update({ 
-          status: "failed", 
-          error_message: `Plan limit: max ${maxPhotos} photos` 
+        .update({
+          status: "failed",
+          error_message: `Limite do plano: máximo ${maxPhotos} fotos`,
         })
         .eq("id", videoId);
 
       return new Response(
-        JSON.stringify({ error: `Your plan allows max ${maxPhotos} photos` }),
+        JSON.stringify({ error: `Seu plano permite no máximo ${maxPhotos} fotos.` }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -165,14 +165,14 @@ serve(async (req) => {
       console.log("Duration limit exceeded:", duration, ">", maxDuration);
       await supabase
         .from("videos")
-        .update({ 
-          status: "failed", 
-          error_message: `Plan limit: max ${maxDuration}s duration` 
+        .update({
+          status: "failed",
+          error_message: `Limite do plano: máximo ${maxDuration}s`,
         })
         .eq("id", videoId);
 
       return new Response(
-        JSON.stringify({ error: `Your plan allows max ${maxDuration}s videos` }),
+        JSON.stringify({ error: `Seu plano permite vídeos de até ${maxDuration}s.` }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
