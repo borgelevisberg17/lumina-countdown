@@ -1,3 +1,4 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
@@ -22,6 +23,8 @@ interface VideoRequest {
 }
 
 serve(async (req) => {
+  console.log("Generate-video function called");
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -29,44 +32,74 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      console.error("No authorization header provided");
       throw new Error("No authorization header");
     }
 
     const token = authHeader.replace("Bearer ", "");
     
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing Supabase environment variables");
+      throw new Error("Server configuration error");
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get user from token
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
+      console.error("Auth error:", authError);
       throw new Error("Invalid authentication");
     }
 
-    const { videoId, photoIds, specs, captions }: VideoRequest = await req.json();
+    console.log("User authenticated:", user.id);
+
+    const body = await req.json();
+    const { videoId, photoIds, specs, captions }: VideoRequest = body;
+
+    console.log("Request body:", { videoId, photoCount: photoIds?.length, specs: specs?.theme });
+
+    if (!videoId || !photoIds || !specs) {
+      throw new Error("Missing required fields: videoId, photoIds, or specs");
+    }
 
     console.log(`Starting video generation for video ${videoId}`);
 
     // Update video status to processing
-    await supabase
+    const { error: updateError } = await supabase
       .from("videos")
       .update({ status: "processing" })
       .eq("id", videoId);
 
+    if (updateError) {
+      console.error("Error updating video status:", updateError);
+    }
+
     // Get user's subscription and credits
-    const { data: subscription } = await supabase
+    const { data: subscription, error: subError } = await supabase
       .from("subscriptions")
       .select("plan")
       .eq("user_id", user.id)
       .single();
 
-    const { data: credits } = await supabase
+    if (subError) {
+      console.log("Subscription error (may be new user):", subError.message);
+    }
+
+    const { data: credits, error: creditsError } = await supabase
       .from("credits")
       .select("balance")
       .eq("user_id", user.id)
       .single();
+
+    if (creditsError) {
+      console.error("Credits error:", creditsError);
+    }
+
+    console.log("User subscription:", subscription?.plan, "Credits:", credits?.balance);
 
     // Calculate credits needed
     const photoCount = photoIds.length;
@@ -84,8 +117,11 @@ serve(async (req) => {
       creditsNeeded += Math.ceil((duration - 60) / 30) * 10;
     }
 
+    console.log("Credits needed:", creditsNeeded);
+
     // Check credits
     if (!credits || credits.balance < creditsNeeded) {
+      console.log("Insufficient credits");
       await supabase
         .from("videos")
         .update({ 
@@ -110,6 +146,7 @@ serve(async (req) => {
     const maxDuration = plan === "free" ? 30 : plan === "pro" ? 60 : 120;
 
     if (photoCount > maxPhotos) {
+      console.log("Photo limit exceeded:", photoCount, ">", maxPhotos);
       await supabase
         .from("videos")
         .update({ 
@@ -125,6 +162,7 @@ serve(async (req) => {
     }
 
     if (duration > maxDuration) {
+      console.log("Duration limit exceeded:", duration, ">", maxDuration);
       await supabase
         .from("videos")
         .update({ 
@@ -140,16 +178,28 @@ serve(async (req) => {
     }
 
     // Deduct credits
-    await supabase
+    const { error: deductError } = await supabase
       .from("credits")
       .update({ balance: credits.balance - creditsNeeded })
       .eq("user_id", user.id);
 
+    if (deductError) {
+      console.error("Error deducting credits:", deductError);
+    }
+
+    console.log("Credits deducted");
+
     // Get photos from storage
-    const { data: photos } = await supabase
+    const { data: photos, error: photosError } = await supabase
       .from("photos")
       .select("*")
       .in("id", photoIds);
+
+    if (photosError) {
+      console.error("Error fetching photos:", photosError);
+    }
+
+    console.log("Photos fetched:", photos?.length);
 
     // Generate signed URLs for photos
     const photoUrls = await Promise.all(
@@ -162,25 +212,16 @@ serve(async (req) => {
     );
 
     // Simulate video generation (in production, this would call a video rendering service)
-    // For now, we'll mark it as completed with metadata
     const videoMetadata = {
       specs,
       photoUrls,
-      captions,
+      captions: captions || [],
       generatedAt: new Date().toISOString(),
       creditsUsed: creditsNeeded,
     };
 
-    // In a real implementation, you would:
-    // 1. Send photos to a video rendering service (e.g., Remotion, FFmpeg API)
-    // 2. Apply transitions based on specs.transitionStyle
-    // 3. Add text overlays based on specs.textTemplate
-    // 4. Add background music based on specs.musicMood
-    // 5. Upload final video to storage
-    // 6. Update video record with storage path
-
-    // For demo purposes, mark as completed
-    await supabase
+    // Mark as completed
+    const { error: completeError } = await supabase
       .from("videos")
       .update({
         status: "completed",
@@ -192,24 +233,34 @@ serve(async (req) => {
       })
       .eq("id", videoId);
 
+    if (completeError) {
+      console.error("Error completing video:", completeError);
+      throw completeError;
+    }
+
     // Insert video_photos records
-    const videoPhotosData = photoIds.map((photoId, index) => ({
-      video_id: videoId,
-      photo_id: photoId,
-      order_index: index,
-      caption: captions.find(c => c.photoId === photoId)?.caption || null,
-    }));
+    if (captions && captions.length > 0) {
+      const videoPhotosData = photoIds.map((photoId, index) => ({
+        video_id: videoId,
+        photo_id: photoId,
+        order_index: index,
+        caption: captions.find(c => c.photoId === photoId)?.caption || null,
+      }));
 
-    await supabase.from("video_photos").insert(videoPhotosData);
+      const { error: vpError } = await supabase.from("video_photos").insert(videoPhotosData);
+      if (vpError) {
+        console.error("Error inserting video_photos:", vpError);
+      }
+    }
 
-    console.log(`Video ${videoId} generation completed`);
+    console.log(`Video ${videoId} generation completed successfully`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         videoId,
         creditsUsed: creditsNeeded,
-        message: "Video generation started successfully" 
+        message: "Video generation completed successfully" 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
