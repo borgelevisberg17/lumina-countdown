@@ -22,6 +22,14 @@ import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { ExportFormat, ExportQuality, TransitionStyle } from "@/hooks/useVideoExport";
 import { cn } from "@/lib/utils";
 import { MusicLibrary, MusicTrack } from "./MusicLibrary";
 
@@ -38,6 +46,12 @@ interface EditorToolsPanelProps {
   onPromptChange: (prompt: string) => void;
   textTemplate: string;
   onTextTemplateChange: (template: string) => void;
+  transitionStyle: TransitionStyle;
+  onTransitionStyleChange: (style: TransitionStyle) => void;
+  exportQuality: ExportQuality;
+  onExportQualityChange: (q: ExportQuality) => void;
+  exportFormat: ExportFormat;
+  onExportFormatChange: (f: ExportFormat) => void;
   videoSpecs: any;
   isProcessing: boolean;
   isGenerating: boolean;
@@ -65,6 +79,12 @@ export function EditorToolsPanel({
   onPromptChange,
   textTemplate,
   onTextTemplateChange,
+  transitionStyle,
+  onTransitionStyleChange,
+  exportQuality,
+  onExportQualityChange,
+  exportFormat,
+  onExportFormatChange,
   videoSpecs,
   isProcessing,
   isGenerating,
@@ -286,28 +306,60 @@ export function EditorToolsPanel({
               </p>
             </div>
 
-            {/* Effects */}
-            <div className="p-4 rounded-lg bg-muted/50 border border-border">
-              <div className="flex items-center gap-2 mb-3">
-                <Palette className="w-4 h-4 text-accent" />
-                <span className="font-medium text-sm">Efeitos Visuais</span>
+            {/* Export + Transitions */}
+            <div className="p-4 rounded-lg bg-muted/50 border border-border space-y-3">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-primary" />
+                <span className="font-medium text-sm">Preview & Exportação</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                {effects.map((effect) => (
-                  <button
-                    key={effect}
-                    className={cn(
-                      "p-2 text-xs rounded transition-colors",
-                      selectedEffect === effect
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background hover:bg-muted"
-                    )}
-                    onClick={() => setSelectedEffect(effect)}
-                  >
-                    {effect}
-                  </button>
-                ))}
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Transição do preview</Label>
+                <Select value={transitionStyle} onValueChange={(v) => onTransitionStyleChange(v as TransitionStyle)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fade">Fade</SelectItem>
+                    <SelectItem value="slide">Slide</SelectItem>
+                    <SelectItem value="zoom">Zoom</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Qualidade</Label>
+                  <Select value={exportQuality} onValueChange={(v) => onExportQualityChange(v as ExportQuality)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Qualidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="720p">720p</SelectItem>
+                      <SelectItem value="1080p">1080p</SelectItem>
+                      <SelectItem value="4k">4K</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Formato</Label>
+                  <Select value={exportFormat} onValueChange={(v) => onExportFormatChange(v as ExportFormat)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Formato" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto</SelectItem>
+                      <SelectItem value="webm">WebM</SelectItem>
+                      <SelectItem value="mp4">MP4 (se suportado)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Dica: MP4 depende do suporte do navegador; “Auto” escolhe o melhor disponível.
+              </p>
             </div>
           </TabsContent>
         </ScrollArea>

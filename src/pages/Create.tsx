@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserPlan } from "@/hooks/useUserPlan";
@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useVideoExport, ExportFormat, ExportQuality, TransitionStyle } from "@/hooks/useVideoExport";
 
 import { EditorHeader } from "@/components/editor/EditorHeader";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
@@ -46,6 +47,7 @@ interface VideoData {
   title: string;
   created_at: string;
   error_message: string | null;
+  metadata?: any;
 }
 
 export default function Create() {
@@ -53,6 +55,7 @@ export default function Create() {
   const { user, loading: authLoading } = useAuth();
   const { subscription, credits, loading: planLoading, refetch } = useUserPlan();
   const isMobile = useIsMobile();
+  const { isExporting, exportProgress, createSlideshow } = useVideoExport();
 
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -71,6 +74,14 @@ export default function Create() {
   const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null);
   const [musicVolume, setMusicVolume] = useState(70);
 
+  // Preview/export settings
+  const [transitionStyle, setTransitionStyle] = useState<TransitionStyle>("fade");
+  const [exportQuality, setExportQuality] = useState<ExportQuality>("1080p");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("auto");
+
+  // History
+  const [videoHistory, setVideoHistory] = useState<VideoData[]>([]);
+
   // Mobile panel state
   const [activePanel, setActivePanel] = useState<string | null>(null);
 
@@ -84,6 +95,10 @@ export default function Create() {
   useEffect(() => {
     if (user) {
       fetchLastVideo();
+      fetchVideoHistory();
+    } else {
+      setVideoHistory([]);
+      setLastVideo(null);
     }
   }, [user]);
 
@@ -103,9 +118,50 @@ export default function Create() {
     }
   };
 
+  const fetchVideoHistory = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("videos")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) return;
+    setVideoHistory((data || []) as VideoData[]);
+  };
+
   const plan = subscription?.plan || "free";
   const maxPhotos = plan === "free" ? 10 : plan === "pro" ? 20 : 100;
   const maxDuration = plan === "free" ? 30 : plan === "pro" ? 60 : 120;
+
+  // Auto-sync status while processing/pending
+  useEffect(() => {
+    if (!user || !lastVideo?.id) return;
+    if (lastVideo.status !== "processing" && lastVideo.status !== "pending") return;
+
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("videos")
+        .select("*")
+        .eq("id", lastVideo.id)
+        .maybeSingle();
+
+      if (data) {
+        setLastVideo(data as VideoData);
+        setVideoHistory((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((v) => v.id === (data as any).id);
+          if (idx >= 0) next[idx] = data as any;
+          else next.unshift(data as any);
+          return next.slice(0, 10);
+        });
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [user, lastVideo?.id, lastVideo?.status]);
 
   const handleRunAIAnalysis = async () => {
     if (photos.length === 0) {
@@ -279,7 +335,8 @@ export default function Create() {
 
       await refetch();
       await fetchLastVideo();
-      toast.success("Vídeo gerado com sucesso!");
+      await fetchVideoHistory();
+      toast.success("Render iniciado! Quando concluir, você poderá exportar/baixar.");
     } catch (error: any) {
       console.error("Error generating video:", error);
       toast.error(error.message || "Erro ao gerar vídeo");
@@ -288,10 +345,82 @@ export default function Create() {
     }
   };
 
+  const handleExportVideo = async (videoId: string) => {
+    if (!user) return;
+
+    try {
+      // Load ordered photos + captions for this render
+      const { data: rows, error } = await supabase
+        .from("video_photos")
+        .select("order_index, caption, photo:photos(storage_path, file_name)")
+        .eq("video_id", videoId)
+        .order("order_index", { ascending: true });
+
+      if (error) throw error;
+
+      const signedSlides = await Promise.all(
+        (rows || []).map(async (row: any, idx: number) => {
+          const storagePath = row?.photo?.storage_path as string | undefined;
+          if (!storagePath) return null;
+
+          const { data: signed, error: signedError } = await supabase.storage
+            .from("photos")
+            .createSignedUrl(storagePath, 60 * 60);
+
+          if (signedError || !signed?.signedUrl) return null;
+
+          return {
+            id: `${videoId}-${idx}`,
+            imageUrl: signed.signedUrl,
+            caption: row?.caption || "",
+          };
+        })
+      );
+
+      const slides = signedSlides.filter(Boolean) as any[];
+      if (slides.length === 0) {
+        toast.error("Não foi possível carregar as fotos para exportar.");
+        return;
+      }
+
+      const blob = await createSlideshow(slides, {
+        quality: exportQuality,
+        format: exportFormat,
+        transition: transitionStyle,
+      });
+
+      if (!blob) {
+        toast.error("Falha ao exportar o vídeo.");
+        return;
+      }
+
+      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+      const path = `${user.id}/${videoId}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(path, blob, { contentType: blob.type, upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from("videos")
+        .update({ storage_path: path })
+        .eq("id", videoId);
+
+      if (updateError) throw updateError;
+
+      toast.success("Exportação concluída! Download liberado.");
+      await fetchLastVideo();
+      await fetchVideoHistory();
+    } catch (error: any) {
+      console.error("Export error:", error);
+      toast.error(error?.message || "Erro ao exportar");
+    }
+  };
+
   const updatePhotoCaption = (id: string, caption: string) => {
-    setPhotos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, caption } : p))
-    );
+    setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, caption } : p)));
   };
 
   if (authLoading || planLoading) {
@@ -316,7 +445,16 @@ export default function Create() {
             selectedPhotoId={selectedPhotoId}
             lastVideo={lastVideo}
             isGenerating={isGenerating}
-            onRefresh={fetchLastVideo}
+            transitionStyle={transitionStyle}
+            isExporting={isExporting}
+            exportProgress={exportProgress}
+            history={videoHistory}
+            onSelectHistory={setLastVideo as any}
+            onExport={handleExportVideo}
+            onRefresh={async () => {
+              await fetchLastVideo();
+              await fetchVideoHistory();
+            }}
           />
         </div>
 
@@ -375,6 +513,12 @@ export default function Create() {
             onPromptChange={setPrompt}
             textTemplate={textTemplate}
             onTextTemplateChange={setTextTemplate}
+            transitionStyle={transitionStyle}
+            onTransitionStyleChange={setTransitionStyle}
+            exportQuality={exportQuality}
+            onExportQualityChange={setExportQuality}
+            exportFormat={exportFormat}
+            onExportFormatChange={setExportFormat}
             videoSpecs={videoSpecs}
             isProcessing={isProcessing}
             isGenerating={isGenerating}
@@ -425,7 +569,16 @@ export default function Create() {
             selectedPhotoId={selectedPhotoId}
             lastVideo={lastVideo}
             isGenerating={isGenerating}
-            onRefresh={fetchLastVideo}
+            transitionStyle={transitionStyle}
+            isExporting={isExporting}
+            exportProgress={exportProgress}
+            history={videoHistory}
+            onSelectHistory={setLastVideo as any}
+            onExport={handleExportVideo}
+            onRefresh={async () => {
+              await fetchLastVideo();
+              await fetchVideoHistory();
+            }}
           />
 
           {/* Timeline */}
@@ -444,6 +597,12 @@ export default function Create() {
           onPromptChange={setPrompt}
           textTemplate={textTemplate}
           onTextTemplateChange={setTextTemplate}
+          transitionStyle={transitionStyle}
+          onTransitionStyleChange={setTransitionStyle}
+          exportQuality={exportQuality}
+          onExportQualityChange={setExportQuality}
+          exportFormat={exportFormat}
+          onExportFormatChange={setExportFormat}
           videoSpecs={videoSpecs}
           isProcessing={isProcessing}
           isGenerating={isGenerating}
