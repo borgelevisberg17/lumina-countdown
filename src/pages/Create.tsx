@@ -5,11 +5,16 @@ import { useUserPlan } from "@/hooks/useUserPlan";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { EditorHeader } from "@/components/editor/EditorHeader";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import { EditorToolsPanel } from "@/components/editor/EditorToolsPanel";
+import { EditorTimeline } from "@/components/editor/EditorTimeline";
+import { MobileToolbar, MobilePanel } from "@/components/editor/MobileToolbar";
+import { MobileMediaPanel } from "@/components/editor/MobileMediaPanel";
+import { MusicLibrary, MusicTrack } from "@/components/editor/MusicLibrary";
 
 const DEFAULT_PROMPT =
   "Crie uma retrospectiva alegre do ano com minhas fotos, destacando momentos chave como viagens, amigos e conquistas. Use transições suaves, música uplifting e legendas animadas em branco sobre fundo azul claro.";
@@ -47,6 +52,7 @@ export default function Create() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { subscription, credits, loading: planLoading, refetch } = useUserPlan();
+  const isMobile = useIsMobile();
 
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -56,6 +62,17 @@ export default function Create() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [videoSpecs, setVideoSpecs] = useState<any>(null);
   const [lastVideo, setLastVideo] = useState<VideoData | null>(null);
+
+  // New states for enhanced features
+  const [autoCutEnabled, setAutoCutEnabled] = useState(false);
+  const [autoCCEnabled, setAutoCCEnabled] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysisComplete, setAiAnalysisComplete] = useState(false);
+  const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null);
+  const [musicVolume, setMusicVolume] = useState(70);
+
+  // Mobile panel state
+  const [activePanel, setActivePanel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -88,6 +105,68 @@ export default function Create() {
 
   const plan = subscription?.plan || "free";
   const maxPhotos = plan === "free" ? 10 : plan === "pro" ? 20 : 100;
+  const maxDuration = plan === "free" ? 30 : plan === "pro" ? 60 : 120;
+
+  const handleRunAIAnalysis = async () => {
+    if (photos.length === 0) {
+      toast.error("Adicione pelo menos uma foto");
+      return;
+    }
+
+    setIsAnalyzing(true);
+
+    try {
+      const action = autoCutEnabled && autoCCEnabled ? "analyze-all" : autoCutEnabled ? "auto-cut" : "auto-cc";
+      
+      const { data, error } = await supabase.functions.invoke("ai-analysis", {
+        body: {
+          photos: photos.map((p) => ({
+            fileName: p.file.name,
+            caption: p.caption,
+          })),
+          action,
+          videoContext: prompt || "Retrospectiva do ano",
+        },
+      });
+
+      if (error) throw error;
+
+      // Apply AI suggestions
+      if (data.result) {
+        const result = data.result;
+
+        // Reorder photos if auto-cut suggests it
+        if (autoCutEnabled && result.suggestedOrder) {
+          const reorderedPhotos = result.suggestedOrder
+            .filter((idx: number) => idx < photos.length)
+            .map((idx: number) => photos[idx]);
+          setPhotos(reorderedPhotos);
+        }
+
+        // Apply captions if auto-cc is enabled
+        if (autoCCEnabled && (result.captions || result.analysis)) {
+          const captions = result.captions || result.analysis;
+          const updatedPhotos = photos.map((photo, index) => {
+            const captionData = captions.find((c: any) => c.photoIndex === index);
+            if (captionData && (!photo.caption || photo.caption.trim() === "")) {
+              return { ...photo, caption: captionData.caption };
+            }
+            return photo;
+          });
+          setPhotos(updatedPhotos);
+        }
+
+        setAiAnalysisComplete(true);
+        toast.success("Análise IA concluída! Fotos otimizadas.");
+      }
+    } catch (error: any) {
+      console.error("AI analysis error:", error);
+      const message = await getBackendFunctionErrorMessage(error);
+      toast.error(message || "Erro na análise IA");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleProcessPrompt = async () => {
     if (photos.length === 0) {
@@ -102,7 +181,7 @@ export default function Create() {
         body: {
           prompt: prompt || DEFAULT_PROMPT,
           photoCount: photos.length,
-          duration: plan === "free" ? 30 : plan === "pro" ? 60 : 120,
+          duration: maxDuration,
         },
       });
 
@@ -179,7 +258,12 @@ export default function Create() {
         body: {
           videoId: video.id,
           photoIds: uploadedPhotos.map((p) => p.id),
-          specs: { ...videoSpecs, textTemplate },
+          specs: { 
+            ...videoSpecs, 
+            textTemplate,
+            musicTrack: selectedTrack?.name,
+            musicVolume,
+          },
           captions: uploadedPhotos.map((p) => ({ photoId: p.id, caption: p.caption })),
         },
       });
@@ -204,6 +288,12 @@ export default function Create() {
     }
   };
 
+  const updatePhotoCaption = (id: string, caption: string) => {
+    setPhotos((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, caption } : p))
+    );
+  };
+
   if (authLoading || planLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -212,13 +302,113 @@ export default function Create() {
     );
   }
 
+  // Mobile Layout
+  if (isMobile) {
+    return (
+      <div className="h-screen flex flex-col bg-background overflow-hidden">
+        {/* Header */}
+        <EditorHeader plan={plan} credits={credits?.balance || 0} />
+
+        {/* Preview - takes most space */}
+        <div className="flex-1 min-h-0">
+          <EditorPreview
+            photos={photos}
+            selectedPhotoId={selectedPhotoId}
+            lastVideo={lastVideo}
+            isGenerating={isGenerating}
+            onRefresh={fetchLastVideo}
+          />
+        </div>
+
+        {/* Timeline */}
+        <EditorTimeline
+          photos={photos}
+          selectedPhotoId={selectedPhotoId}
+          onPhotosChange={setPhotos}
+          onPhotoSelect={setSelectedPhotoId}
+          duration={maxDuration}
+        />
+
+        {/* Bottom Toolbar */}
+        <MobileToolbar
+          activePanel={activePanel}
+          onPanelChange={setActivePanel}
+          photoCount={photos.length}
+        />
+
+        {/* Mobile Panels */}
+        <MobilePanel
+          isOpen={activePanel === "media"}
+          onClose={() => setActivePanel(null)}
+          title="Mídia"
+        >
+          <MobileMediaPanel
+            photos={photos}
+            maxPhotos={maxPhotos}
+            selectedPhotoId={selectedPhotoId}
+            onPhotosChange={setPhotos}
+            onPhotoSelect={setSelectedPhotoId}
+            onUpdateCaption={updatePhotoCaption}
+          />
+        </MobilePanel>
+
+        <MobilePanel
+          isOpen={activePanel === "audio"}
+          onClose={() => setActivePanel(null)}
+          title="Música"
+        >
+          <MusicLibrary
+            selectedTrack={selectedTrack}
+            onSelectTrack={setSelectedTrack}
+            volume={musicVolume}
+            onVolumeChange={setMusicVolume}
+          />
+        </MobilePanel>
+
+        <MobilePanel
+          isOpen={activePanel === "ai" || activePanel === "text" || activePanel === "tools"}
+          onClose={() => setActivePanel(null)}
+          title={activePanel === "ai" ? "IA" : activePanel === "text" ? "Texto" : "Ferramentas"}
+        >
+          <EditorToolsPanel
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            textTemplate={textTemplate}
+            onTextTemplateChange={setTextTemplate}
+            videoSpecs={videoSpecs}
+            isProcessing={isProcessing}
+            isGenerating={isGenerating}
+            onProcessPrompt={handleProcessPrompt}
+            onGenerateVideo={handleGenerateVideo}
+            credits={credits?.balance || 0}
+            photoCount={photos.length}
+            plan={plan}
+            autoCutEnabled={autoCutEnabled}
+            onAutoCutChange={setAutoCutEnabled}
+            autoCCEnabled={autoCCEnabled}
+            onAutoCCChange={setAutoCCEnabled}
+            isAnalyzing={isAnalyzing}
+            onRunAIAnalysis={handleRunAIAnalysis}
+            aiAnalysisComplete={aiAnalysisComplete}
+            selectedTrack={selectedTrack}
+            onSelectTrack={setSelectedTrack}
+            musicVolume={musicVolume}
+            onMusicVolumeChange={setMusicVolume}
+            isMobile
+          />
+        </MobilePanel>
+      </div>
+    );
+  }
+
+  // Desktop Layout
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
       <EditorHeader plan={plan} credits={credits?.balance || 0} />
 
       {/* Main Editor Area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left Sidebar - Media */}
         <EditorSidebar
           photos={photos}
@@ -228,14 +418,25 @@ export default function Create() {
           onPhotoSelect={setSelectedPhotoId}
         />
 
-        {/* Center - Preview */}
-        <EditorPreview
-          photos={photos}
-          selectedPhotoId={selectedPhotoId}
-          lastVideo={lastVideo}
-          isGenerating={isGenerating}
-          onRefresh={fetchLastVideo}
-        />
+        {/* Center - Preview + Timeline */}
+        <div className="flex-1 flex flex-col min-h-0">
+          <EditorPreview
+            photos={photos}
+            selectedPhotoId={selectedPhotoId}
+            lastVideo={lastVideo}
+            isGenerating={isGenerating}
+            onRefresh={fetchLastVideo}
+          />
+
+          {/* Timeline */}
+          <EditorTimeline
+            photos={photos}
+            selectedPhotoId={selectedPhotoId}
+            onPhotosChange={setPhotos}
+            onPhotoSelect={setSelectedPhotoId}
+            duration={maxDuration}
+          />
+        </div>
 
         {/* Right Sidebar - Tools */}
         <EditorToolsPanel
@@ -251,6 +452,17 @@ export default function Create() {
           credits={credits?.balance || 0}
           photoCount={photos.length}
           plan={plan}
+          autoCutEnabled={autoCutEnabled}
+          onAutoCutChange={setAutoCutEnabled}
+          autoCCEnabled={autoCCEnabled}
+          onAutoCCChange={setAutoCCEnabled}
+          isAnalyzing={isAnalyzing}
+          onRunAIAnalysis={handleRunAIAnalysis}
+          aiAnalysisComplete={aiAnalysisComplete}
+          selectedTrack={selectedTrack}
+          onSelectTrack={setSelectedTrack}
+          musicVolume={musicVolume}
+          onMusicVolumeChange={setMusicVolume}
         />
       </div>
     </div>
