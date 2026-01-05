@@ -13,16 +13,17 @@ import {
   Loader2,
   Clock,
   Zap,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { MusicLibrary, MusicTrack } from "./MusicLibrary";
 
 const TEXT_TEMPLATES = [
   { id: "fade_in", name: "Fade-In", icon: "✨" },
@@ -30,14 +31,6 @@ const TEXT_TEMPLATES = [
   { id: "typewriter", name: "Typewriter", icon: "⌨️" },
   { id: "slide_up_glow", name: "Slide Glow", icon: "🌟" },
   { id: "rotate_zoom", name: "Rotate Zoom", icon: "🔄" },
-];
-
-const MUSIC_MOODS = [
-  { id: "uplifting", name: "Uplifting", emoji: "🎉" },
-  { id: "emotional", name: "Emocional", emoji: "💫" },
-  { id: "energetic", name: "Energético", emoji: "⚡" },
-  { id: "calm", name: "Calmo", emoji: "🌊" },
-  { id: "cinematic", name: "Cinematográfico", emoji: "🎬" },
 ];
 
 interface EditorToolsPanelProps {
@@ -53,6 +46,18 @@ interface EditorToolsPanelProps {
   credits: number;
   photoCount: number;
   plan: string;
+  autoCutEnabled: boolean;
+  onAutoCutChange: (enabled: boolean) => void;
+  autoCCEnabled: boolean;
+  onAutoCCChange: (enabled: boolean) => void;
+  isAnalyzing: boolean;
+  onRunAIAnalysis: () => void;
+  aiAnalysisComplete: boolean;
+  selectedTrack: MusicTrack | null;
+  onSelectTrack: (track: MusicTrack | null) => void;
+  musicVolume: number;
+  onMusicVolumeChange: (volume: number) => void;
+  isMobile?: boolean;
 }
 
 export function EditorToolsPanel({
@@ -68,19 +73,36 @@ export function EditorToolsPanel({
   credits,
   photoCount,
   plan,
+  autoCutEnabled,
+  onAutoCutChange,
+  autoCCEnabled,
+  onAutoCCChange,
+  isAnalyzing,
+  onRunAIAnalysis,
+  aiAnalysisComplete,
+  selectedTrack,
+  onSelectTrack,
+  musicVolume,
+  onMusicVolumeChange,
+  isMobile = false,
 }: EditorToolsPanelProps) {
   const [activeTab, setActiveTab] = useState("ai");
-  const [autoCutEnabled, setAutoCutEnabled] = useState(false);
-  const [autoCCEnabled, setAutoCCEnabled] = useState(false);
-  const [selectedMood, setSelectedMood] = useState("uplifting");
+  const [selectedEffect, setSelectedEffect] = useState("Nenhum");
 
   const estimatedCredits = photoCount <= 10 ? 10 : photoCount <= 20 ? 20 : 40;
   const maxDuration = plan === "free" ? 30 : plan === "pro" ? 60 : 120;
 
+  const effects = ["Nenhum", "Vintage", "Glow", "B&W", "Neon", "Soft"];
+
   return (
-    <div className="w-80 bg-card border-l border-border flex flex-col h-full">
+    <div className={cn(
+      "bg-card border-border flex flex-col",
+      isMobile 
+        ? "w-full h-full border-t" 
+        : "w-80 border-l h-full"
+    )}>
       {/* Header */}
-      <div className="p-4 border-b border-border">
+      <div className="p-3 md:p-4 border-b border-border shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-primary" />
@@ -93,24 +115,31 @@ export function EditorToolsPanel({
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-4 mx-4 mt-4">
-          <TabsTrigger value="ai" className="text-xs">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <TabsList className={cn(
+          "mx-3 md:mx-4 mt-3 md:mt-4 shrink-0",
+          isMobile ? "grid grid-cols-4" : "grid grid-cols-4"
+        )}>
+          <TabsTrigger value="ai" className="text-xs gap-1">
             <Wand2 className="w-4 h-4" />
+            {isMobile && <span className="hidden sm:inline">IA</span>}
           </TabsTrigger>
-          <TabsTrigger value="text" className="text-xs">
+          <TabsTrigger value="text" className="text-xs gap-1">
             <Type className="w-4 h-4" />
+            {isMobile && <span className="hidden sm:inline">Texto</span>}
           </TabsTrigger>
-          <TabsTrigger value="audio" className="text-xs">
+          <TabsTrigger value="audio" className="text-xs gap-1">
             <Music className="w-4 h-4" />
+            {isMobile && <span className="hidden sm:inline">Áudio</span>}
           </TabsTrigger>
-          <TabsTrigger value="tools" className="text-xs">
+          <TabsTrigger value="tools" className="text-xs gap-1">
             <Scissors className="w-4 h-4" />
+            {isMobile && <span className="hidden sm:inline">Tools</span>}
           </TabsTrigger>
         </TabsList>
 
         <ScrollArea className="flex-1">
-          <TabsContent value="ai" className="p-4 space-y-4 mt-0">
+          <TabsContent value="ai" className="p-3 md:p-4 space-y-4 mt-0">
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
                 Prompt IA
@@ -119,7 +148,7 @@ export function EditorToolsPanel({
                 placeholder="Descreva como você quer sua retrospectiva..."
                 value={prompt}
                 onChange={(e) => onPromptChange(e.target.value)}
-                rows={4}
+                rows={isMobile ? 3 : 4}
                 className="resize-none text-sm"
               />
             </div>
@@ -140,7 +169,7 @@ export function EditorToolsPanel({
             )}
 
             <div className="pt-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Clock className="w-3 h-3" />
                 <span>Duração máx: {maxDuration}s</span>
                 <span className="ml-auto">~{estimatedCredits} créditos</span>
@@ -148,7 +177,7 @@ export function EditorToolsPanel({
             </div>
           </TabsContent>
 
-          <TabsContent value="text" className="p-4 space-y-4 mt-0">
+          <TabsContent value="text" className="p-3 md:p-4 space-y-4 mt-0">
             <Label className="text-xs text-muted-foreground">
               Template de Legenda
             </Label>
@@ -174,47 +203,60 @@ export function EditorToolsPanel({
             </div>
           </TabsContent>
 
-          <TabsContent value="audio" className="p-4 space-y-4 mt-0">
-            <Label className="text-xs text-muted-foreground">
-              Estilo de Música
-            </Label>
-            <div className="grid grid-cols-2 gap-2">
-              {MUSIC_MOODS.map((mood) => (
-                <button
-                  key={mood.id}
-                  className={cn(
-                    "flex flex-col items-center gap-2 p-4 rounded-lg transition-all",
-                    selectedMood === mood.id
-                      ? "bg-primary/20 ring-1 ring-primary"
-                      : "bg-muted/50 hover:bg-muted"
-                  )}
-                  onClick={() => setSelectedMood(mood.id)}
-                >
-                  <span className="text-2xl">{mood.emoji}</span>
-                  <span className="text-xs font-medium">{mood.name}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="pt-4">
-              <Label className="text-xs text-muted-foreground mb-3 block">
-                Volume da Música
-              </Label>
-              <Slider defaultValue={[70]} max={100} step={1} />
-            </div>
+          <TabsContent value="audio" className="p-3 md:p-4 mt-0 h-full">
+            <MusicLibrary
+              selectedTrack={selectedTrack}
+              onSelectTrack={onSelectTrack}
+              volume={musicVolume}
+              onVolumeChange={onMusicVolumeChange}
+            />
           </TabsContent>
 
-          <TabsContent value="tools" className="p-4 space-y-4 mt-0">
+          <TabsContent value="tools" className="p-3 md:p-4 space-y-4 mt-0">
+            {/* AI Analysis Button */}
+            {(autoCutEnabled || autoCCEnabled) && !aiAnalysisComplete && (
+              <Button
+                onClick={onRunAIAnalysis}
+                disabled={isAnalyzing || photoCount === 0}
+                className="w-full"
+                variant="secondary"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Analisando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Executar Análise IA
+                  </>
+                )}
+              </Button>
+            )}
+
+            {aiAnalysisComplete && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs text-emerald-500">Análise IA concluída</span>
+              </div>
+            )}
+
             {/* Auto-Cut */}
-            <div className="p-4 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20">
+            <div className={cn(
+              "p-4 rounded-lg border",
+              autoCutEnabled 
+                ? "bg-gradient-to-br from-primary/10 to-secondary/10 border-primary/20" 
+                : "bg-muted/50 border-border"
+            )}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-primary" />
+                  <Zap className={cn("w-4 h-4", autoCutEnabled ? "text-primary" : "text-muted-foreground")} />
                   <span className="font-medium text-sm">Auto-Cut IA</span>
                 </div>
                 <Switch
                   checked={autoCutEnabled}
-                  onCheckedChange={setAutoCutEnabled}
+                  onCheckedChange={onAutoCutChange}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -223,15 +265,20 @@ export function EditorToolsPanel({
             </div>
 
             {/* Auto CC */}
-            <div className="p-4 rounded-lg bg-muted/50 border border-border">
+            <div className={cn(
+              "p-4 rounded-lg border",
+              autoCCEnabled 
+                ? "bg-gradient-to-br from-secondary/10 to-primary/10 border-secondary/20" 
+                : "bg-muted/50 border-border"
+            )}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Captions className="w-4 h-4 text-secondary" />
+                  <Captions className={cn("w-4 h-4", autoCCEnabled ? "text-secondary" : "text-muted-foreground")} />
                   <span className="font-medium text-sm">Legendas Auto</span>
                 </div>
                 <Switch
                   checked={autoCCEnabled}
-                  onCheckedChange={setAutoCCEnabled}
+                  onCheckedChange={onAutoCCChange}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -246,16 +293,20 @@ export function EditorToolsPanel({
                 <span className="font-medium text-sm">Efeitos Visuais</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {["Nenhum", "Vintage", "Glow", "B&W", "Neon", "Soft"].map(
-                  (effect) => (
-                    <button
-                      key={effect}
-                      className="p-2 text-xs rounded bg-background hover:bg-muted transition-colors"
-                    >
-                      {effect}
-                    </button>
-                  )
-                )}
+                {effects.map((effect) => (
+                  <button
+                    key={effect}
+                    className={cn(
+                      "p-2 text-xs rounded transition-colors",
+                      selectedEffect === effect
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted"
+                    )}
+                    onClick={() => setSelectedEffect(effect)}
+                  >
+                    {effect}
+                  </button>
+                ))}
               </div>
             </div>
           </TabsContent>
@@ -263,7 +314,7 @@ export function EditorToolsPanel({
       </Tabs>
 
       {/* Actions */}
-      <div className="p-4 border-t border-border space-y-2">
+      <div className="p-3 md:p-4 border-t border-border space-y-2 shrink-0">
         {!videoSpecs ? (
           <Button
             className="w-full"
