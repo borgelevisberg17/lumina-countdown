@@ -241,21 +241,29 @@ const NewYearCelebration = () => {
   };
 
   const handleExportVideo = async () => {
-    const photosToExport = allPhotoAlbums.map(p => ({
-      id: p.id,
-      title: p.title,
-      description: p.description,
-      imageUrl: p.imageUrl,
-      gradientClass: p.gradientClass,
-    }));
+    const photosToExport = allPhotoAlbums
+      .filter(p => p.imageUrl)
+      .map(p => ({
+        id: String(p.id),
+        imageUrl: p.imageUrl!,
+        caption: p.description,
+      }));
+
+    if (photosToExport.length === 0) {
+      toast.error('Adicione fotos com imagens para exportar.');
+      return;
+    }
 
     toast.info('Gerando vídeo... Isso pode levar alguns segundos.');
     
-    const blob = await createSlideshow(photosToExport);
+    const blob = await createSlideshow(photosToExport, {
+      quality: "1080p",
+      format: "auto",
+      transition: "fade",
+    });
     
     if (blob) {
       setIsExportDialogOpen(true);
-      // Store blob for later use
       (window as any).__exportedVideoBlob = blob;
       toast.success('Vídeo gerado com sucesso!');
     } else {

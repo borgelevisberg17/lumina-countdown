@@ -269,9 +269,38 @@ export const useVideoExport = () => {
     []
   );
 
+  const downloadVideo = useCallback(async (blob: Blob, filename = "video-export") => {
+    const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${filename}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const shareVideo = useCallback(async (blob: Blob, title = "Meu vídeo"): Promise<boolean> => {
+    if (navigator.share && navigator.canShare?.({ files: [new File([blob], "video.webm", { type: blob.type })] })) {
+      try {
+        await navigator.share({
+          title,
+          files: [new File([blob], "video.webm", { type: blob.type })],
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }, []);
+
   return {
     isExporting,
     exportProgress,
     createSlideshow,
+    downloadVideo,
+    shareVideo,
   };
 };
