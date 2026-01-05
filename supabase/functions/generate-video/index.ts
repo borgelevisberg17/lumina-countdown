@@ -81,12 +81,12 @@ serve(async (req) => {
     // Get user's subscription and credits
     const { data: subscription, error: subError } = await supabase
       .from("subscriptions")
-      .select("plan")
+      .select("plan,status")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (subError) {
-      console.log("Subscription error (may be new user):", subError.message);
+      console.log("Subscription fetch error:", subError.message);
     }
 
     const { data: credits, error: creditsError } = await supabase
@@ -99,7 +99,14 @@ serve(async (req) => {
       console.error("Credits error:", creditsError);
     }
 
-    console.log("User subscription:", subscription?.plan, "Credits:", credits?.balance);
+    console.log(
+      "User subscription:",
+      subscription?.plan,
+      "Status:",
+      (subscription as any)?.status,
+      "Credits:",
+      credits?.balance
+    );
 
     // Calculate credits needed
     const photoCount = photoIds.length;
@@ -140,9 +147,9 @@ serve(async (req) => {
       );
     }
 
-    // Check plan limits
-    const plan = subscription?.plan || "free";
-    const maxPhotos = plan === "free" ? 10 : plan === "pro" ? 20 : Infinity;
+    // Check plan limits (default to free if not active)
+    const plan = (subscription as any)?.status === "active" ? (subscription?.plan || "free") : "free";
+    const maxPhotos = plan === "free" ? 10 : plan === "pro" ? 20 : 100;
     const maxDuration = plan === "free" ? 30 : plan === "pro" ? 60 : 120;
 
     if (photoCount > maxPhotos) {
